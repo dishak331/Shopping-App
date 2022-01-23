@@ -43,6 +43,14 @@ class Products with ChangeNotifier {
   ];
   // var _showFavoritesOnly = false;
 
+  final String authToken;
+  final String userId;
+//   List<Product> _items;
+// String authToken = '';
+// String userId = '';
+
+  Products(this.authToken, this.userId, this._items);
+
   List<Product> get items {
     // if (_showFavoritesOnly) {
     //   return _items.where((prodItem) => prodItem.isFavorite).toList();
@@ -68,15 +76,21 @@ class Products with ChangeNotifier {
   //   notifyListeners();
   // }
 
-  Future<void> fetchAndSetProducts() async {
+  Future<void> fetchAndSetProducts([bool filterByUser = false]) async {
+    final filterString =
+        filterByUser ? 'orderBy="creatorId"&equalTo"$userId"' : '';
     final url = Uri.parse(
-        'https://fir-app-ba587-default-rtdb.firebaseio.com/products.json');
+        'https://fir-app-ba587-default-rtdb.firebaseio.com/products.json?auth=$authToken&$filterString');
     try {
       final response = await http.get(url);
       final extractedData = json.decode(response.body) as Map<String, dynamic>;
       if (extractedData == null) {
         return;
       }
+      final favUrl = Uri.parse(
+          'https://fir-app-ba587-default-rtdb.firebaseio.com/userFavourites/$userId.json?auth=$authToken');
+      final favouriteResponse = await http.get(favUrl);
+      final favouriteData = json.decode(favouriteResponse.body);
       final List<Product> loadedProducts = [];
       extractedData.forEach((prodId, prodData) {
         loadedProducts.add(Product(
@@ -84,20 +98,23 @@ class Products with ChangeNotifier {
           title: prodData['title'],
           description: prodData['description'],
           price: prodData['price'],
-          isFavorite: prodData['isFavorite'],
+          isFavorite: favouriteData == null
+              ? false
+              : favouriteData[prodId] ??
+                  false, //?? checks if the prodid is null which will give null in return then we set it to false
           imageUrl: prodData['imageUrl'],
         ));
       });
       _items = loadedProducts;
       notifyListeners();
     } catch (error) {
-      throw (error);
+      throw error;
     }
   }
 
   Future<void> addProduct(Product product) async {
     final url = Uri.parse(
-        'https://fir-app-ba587-default-rtdb.firebaseio.com/products.json');
+        'https://fir-app-ba587-default-rtdb.firebaseio.com/products.json?auth=$authToken');
     try {
       final response = await http.post(
         url,
@@ -106,7 +123,8 @@ class Products with ChangeNotifier {
           'description': product.description,
           'imageUrl': product.imageUrl,
           'price': product.price,
-          'isFavorite': product.isFavorite,
+          'creatorId': userId,
+          //'isFavorite': product.isFavorite,
         }),
       );
       final newProduct = Product(
@@ -129,7 +147,7 @@ class Products with ChangeNotifier {
     final prodIndex = _items.indexWhere((prod) => prod.id == id);
     if (prodIndex >= 0) {
       final url = Uri.parse(
-          'https://fir-app-ba587-default-rtdb.firebaseio.com/products/$id.json');
+          'https://fir-app-ba587-default-rtdb.firebaseio.com/products/$id.json?auth=$authToken');
       await http.patch(url,
           body: json.encode({
             'title': newProduct.title,
@@ -146,7 +164,7 @@ class Products with ChangeNotifier {
 
   Future<void> deleteProduct(String id) async {
     final url = Uri.parse(
-        'https://fir-app-ba587-default-rtdb.firebaseio.com/products/$id.json');
+        'https://fir-app-ba587-default-rtdb.firebaseio.com/products/$id.json?auth=$authToken');
     final existingProductIndex = _items.indexWhere((prod) => prod.id == id);
     var existingProduct = _items[existingProductIndex];
     _items.removeAt(existingProductIndex);
